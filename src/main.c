@@ -45,7 +45,8 @@ int main(int argc, char *argv[]) {
     struct timespec start, end;
     clock_gettime(CLOCK_MONOTONIC, &start);
     
-    int result = sys_smart_copy(src_path, dest_recipe);
+    BackupStats stats = {0};
+    int result = sys_smart_copy(src_path, dest_recipe, &stats);
     
     clock_gettime(CLOCK_MONOTONIC, &end);
     double elapsed_smart = (end.tv_sec - start.tv_sec) + 
@@ -53,6 +54,15 @@ int main(int argc, char *argv[]) {
                            
     if (result == 0) {
         printf("Backup inteligente completado en %.6f segundos.\n", elapsed_smart);
+        printf("\n=== Resultado del Backup ===\n");
+        printf("Bloques totales procesados : %d\n", stats.chunks_total);
+        printf("Bloques nuevos almacenados : %d\n", stats.chunks_new);
+        float ahorro_porcentaje = 0.0f;
+        if (stats.chunks_total > 0) {
+            ahorro_porcentaje = ((float)stats.chunks_dedup / stats.chunks_total) * 100.0f;
+        }
+        printf("Bloques deduplicados       : %d  (%.1f%% ahorro)\n", stats.chunks_dedup, ahorro_porcentaje);
+        printf("Espacio ahorrado           : %zu KB\n", stats.bytes_saved / 1024);
     } else {
         printf("Fallo el backup inteligente.\n");
         return 1;
@@ -71,8 +81,7 @@ int main(int argc, char *argv[]) {
     
     printf("Copia estandar completada en %.6f segundos.\n", elapsed_stdio);
     
-    // Análisis documentado según rúbrica
-    printf("\n--- ANALISIS DE RENDIMIENTO (Rubrica) ---\n");
+    // Análisis
     printf("1. Archivos Pequeños (Ej. 1KB): fread() suele ser más rápido porque stdio.h usa buffering en espacio de usuario. En vez de llamar directo a read() a syscall kernel cada vez, en stdio.h se reduce el context switch.\n");
     printf("   Nuestro sys_smart_copy requiere siempre por lo menos 1 read() y las validaciones posteriores.\n");
     printf("2. Archivos Medianos (Ej. 1MB): Ambos se equilibran por procesar buffers similares (4KB).\n");

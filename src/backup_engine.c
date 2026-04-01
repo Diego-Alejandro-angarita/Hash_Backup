@@ -18,7 +18,7 @@ static int ends_with(const char *str, const char *suffix) {
     return strncmp(str + lenstr - lensuffix, suffix, lensuffix) == 0;
 }
 
-int sys_smart_copy(const char *src_path, const char *dest_recipe) {
+int sys_smart_copy(const char *src_path, const char *dest_recipe, BackupStats *stats) {
     // 1. Validar extensión .txt
     if (!ends_with(src_path, ".txt")) {
         fprintf(stderr, "Error: Solo se admiten archivos .txt.\n");
@@ -60,6 +60,7 @@ int sys_smart_copy(const char *src_path, const char *dest_recipe) {
 
     // 4. Bucle principal de lectura (Buffer fijo de 4KB)
     while ((bytes_read = read(fd_src, buffer, BLOCK_SIZE)) > 0) {
+        if (stats) stats->chunks_total++;
         // Pad con ceros si el archivo no llena un bloque de 4KB,
         // para asegurar que el hashing sea determinístico (bloques exactos).
         char padded_buffer[BLOCK_SIZE] = {0};
@@ -76,6 +77,7 @@ int sys_smart_copy(const char *src_path, const char *dest_recipe) {
         // ya creó el bloque, fallará devolviendo EEXIST de forma segura, previniendo race-conditions.
         int fd_chunk = open(chunk_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
         if (fd_chunk >= 0) {
+            if (stats) stats->chunks_new++;
             // Es un chunk nuevo, necesitamos escribir los 4KB
             ssize_t bytes_written = write(fd_chunk, padded_buffer, BLOCK_SIZE);
             if (bytes_written < 0) {
@@ -100,11 +102,18 @@ int sys_smart_copy(const char *src_path, const char *dest_recipe) {
         }
         
         // Si errno == EEXIST, ignoramos y seguimos porque ya tenemos el bloque alojado.
-        
+        if (fd_chunk < 0 && errno == EEXIST) {
+            if (stats) stats->chunks_dedup++;
+        }
+
         // 6. Escribir entrada (hash en la receta)
         char recipe_entry[HASH_STRING_LENGTH + 1];
         snprintf(recipe_entry, sizeof(recipe_entry), "%s\n", hash_str);
         write(fd_recipe, recipe_entry, strlen(recipe_entry));
+    }
+
+    if (stats) {
+        stats->bytes_saved = (size_t)stats->chunks_dedup * BLOCK_SIZE;
     }
 
     if (bytes_read < 0) {
