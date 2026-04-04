@@ -1,8 +1,8 @@
-CC = gcc
-CFLAGS = -Wall -Wextra -Iinclude -D_POSIX_C_SOURCE=199309L
-LDFLAGS = 
+CC      = gcc
+CFLAGS  = -Wall -Wextra -Iinclude -D_POSIX_C_SOURCE=199309L
+LDFLAGS =
 
-TARGET = backup_app
+TARGET  = backup_app
 SRC_DIR = src
 OBJ_DIR = obj
 
@@ -20,6 +20,9 @@ $(OBJ_DIR):
 
 clean:
 	rm -rf $(OBJ_DIR) $(TARGET)
-	rm -rf repo/ *.copy *.recipe
+	rm -rf repo/ *.copy test_*.txt
 
-.PHONY: clean
+benchmark: $(TARGET)
+	./$(TARGET) --benchmark
+
+.PHONY: clean benchmark
