@@ -226,3 +226,70 @@ int stdio_copy(const char *src_path, const char *dest_path) {
     fclose(src);
     return status;
 }
+
+int sys_restore(const char *recipe_name, const char *dest_path) {
+    if (!recipe_name || !dest_path) return -1;
+
+    char recipe_path[MAX_PATH_LEN];
+    if (ends_with(recipe_name, ".recipe")) {
+        snprintf(recipe_path, sizeof(recipe_path), "%s/%s", RECIPES_DIR, recipe_name);
+    } else {
+        snprintf(recipe_path, sizeof(recipe_path), "%s/%s.recipe", RECIPES_DIR, recipe_name);
+    }
+
+    int fd_recipe = open(recipe_path, O_RDONLY);
+    if (fd_recipe < 0) {
+        if (errno == ENOENT) perror("Error: Receta no encontrada");
+        else if (errno == EACCES) perror("Error: Sin permisos para leer receta");
+        else perror("Error al abrir la receta");
+        return -1;
+    }
+
+    int fd_dest = open(dest_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (fd_dest < 0) {
+        if (errno == EACCES) perror("Error: Sin permisos en destino");
+        else perror("Error al abrir destino");
+        close(fd_recipe);
+        return -1;
+    }
+
+    char entry[17];
+    ssize_t n;
+    while ((n = read(fd_recipe, entry, 17)) == 17) {
+        entry[16] = '\0'; // reemplaza '\n' por terminador nulo
+
+        char chunk_path[MAX_PATH_LEN];
+        snprintf(chunk_path, sizeof(chunk_path), "%s/%s", CHUNKS_DIR, entry);
+
+        int fd_chunk = open(chunk_path, O_RDONLY);
+        if (fd_chunk < 0) {
+            perror("Error: chunk no encontrado (posible corrupción)");
+            close(fd_recipe);
+            close(fd_dest);
+            return -1;
+        }
+
+        char buf[BLOCK_SIZE];
+        ssize_t bytes = read(fd_chunk, buf, BLOCK_SIZE);
+        if (bytes > 0) {
+            // Eliminar padding de ceros que se agrego en archivos de texto
+            while (bytes > 0 && buf[bytes - 1] == '\0') {
+                bytes--;
+            }
+            
+            if (write(fd_dest, buf, bytes) < 0) {
+                if (errno == ENOSPC) perror("Error: Sin espacio al restaurar");
+                else perror("Error escribiendo archivo");
+                close(fd_chunk);
+                close(fd_recipe);
+                close(fd_dest);
+                return -1;
+            }
+        }
+        close(fd_chunk);
+    }
+    
+    close(fd_recipe);
+    close(fd_dest);
+    return 0;
+}

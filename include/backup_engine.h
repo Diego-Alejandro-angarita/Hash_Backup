@@ -34,6 +34,7 @@ typedef struct {
 
 void compute_chunk_hash(const char *buffer, size_t length, char *out_hash);
 int sys_smart_copy(const char *src_path, const char *dest_recipe, BackupStats *stats);
+int sys_restore(const char *recipe_name, const char *dest_path);
 
 // copia con stdio.h para comparar rendimiento
 int stdio_copy(const char *src_path, const char *dest_path);

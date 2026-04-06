@@ -143,66 +143,69 @@ static void correr_benchmarks(void) {
 int main(int argc, char *argv[]) {
     printf("\n=== Hash Backup - Smart Copy con deduplicacion ===\n\n");
 
-    if (argc == 2 && strcmp(argv[1], "--benchmark") == 0) {
+    if (argc >= 2 && strcmp(argv[1], "--benchmark") == 0) {
         correr_benchmarks();
         return 0;
     }
 
-    if (argc < 3) {
-        fprintf(stderr, "uso: %s <archivo.txt> <nombre_receta>\n", argv[0]);
-        fprintf(stderr, "     %s --benchmark\n", argv[0]);
+    if (argc < 2) {
+        fprintf(stderr, "uso: %s <backup|restore|--benchmark> [args...]\n", argv[0]);
         return 1;
     }
 
-    const char *src_path    = argv[1];
-    const char *dest_recipe = argv[2];
+    if (strcmp(argv[1], "backup") == 0) {
+        if (argc < 4) {
+            fprintf(stderr, "uso: %s backup <archivo.txt> <nombre_receta>\n", argv[0]);
+            return 1;
+        }
 
-    struct timespec t0, t1;
+        const char *src_path    = argv[2];
+        const char *dest_recipe = argv[3];
 
-    BackupStats stats = {0};
+        struct timespec t0, t1;
+        BackupStats stats = {0};
 
-    // medir sys_smart_copy
-    printf("corriendo sys_smart_copy...\n");
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    int r1 = sys_smart_copy(src_path, dest_recipe, &stats);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    double t_smart = elapsed(&t0, &t1);
+        // medir sys_smart_copy
+        printf("corriendo sys_smart_copy...\n");
+        clock_gettime(CLOCK_MONOTONIC, &t0);
+        int r1 = sys_smart_copy(src_path, dest_recipe, &stats);
+        clock_gettime(CLOCK_MONOTONIC, &t1);
+        double t_smart = elapsed(&t0, &t1);
 
-    if (r1 != SCOPY_OK) {
-        printf("fallo el backup (codigo %d)\n", r1);
+        if (r1 != SCOPY_OK) {
+            printf("fallo el backup (codigo %d)\n", r1);
+            return 1;
+        }
+        printf("listo. tiempo: %.6f segundos\n\n", t_smart);
+
+        printf("--- Estadisticas de Deduplicacion ---\n");
+        printf("Bloques totales procesados: %d\n", stats.chunks_total);
+        printf("Bloques nuevos guardados:   %d\n", stats.chunks_new);
+        printf("Bloques deduplicados:       %d\n", stats.chunks_dedup);
+        printf("Espacio total ahorrado:     %zu bytes\n", stats.bytes_saved);
+        printf("-------------------------------------\n\n");
+    } else if (strcmp(argv[1], "restore") == 0) {
+        if (argc < 4) {
+            fprintf(stderr, "uso: %s restore <nombre_receta> <destino.txt>\n", argv[0]);
+            return 1;
+        }
+        const char *dest_recipe = argv[2];
+        const char *dest_path = argv[3];
+        
+        printf("\nRestaurando desde %s.recipe a %s...\n", dest_recipe, dest_path);
+        int r = sys_restore(dest_recipe, dest_path);
+        
+        if (r == 0) {
+            printf("Restauracion completada con exito.\n");
+        } else {
+            printf("Fallo la restauracion (codigo %d).\n", r);
+            return 1;
+        }
+    } else {
+        fprintf(stderr, "Subcomando desconocido: %s\n", argv[1]);
+        fprintf(stderr, "uso: %s <backup|restore|--benchmark> [args...]\n", argv[0]);
         return 1;
     }
-    printf("listo. tiempo: %.6f segundos\n\n", t_smart);
-    
-    printf("--- Estadisticas de Deduplicacion ---\n");
-    printf("Bloques totales procesados: %d\n", stats.chunks_total);
-    printf("Bloques nuevos guardados:   %d\n", stats.chunks_new);
-    printf("Bloques deduplicados:       %d\n", stats.chunks_dedup);
-    printf("Espacio total ahorrado:     %zu bytes\n", stats.bytes_saved);
-    printf("-------------------------------------\n\n");
 
-    // medir stdio_copy
-    printf("corriendo stdio_copy para comparar...\n");
-    char destino[512];
-    snprintf(destino, sizeof(destino), "%s.copy", src_path);
-
-    clock_gettime(CLOCK_MONOTONIC, &t0);
-    int r2 = stdio_copy(src_path, destino);
-    clock_gettime(CLOCK_MONOTONIC, &t1);
-    double t_stdio = elapsed(&t0, &t1);
-
-    if (r2 != SCOPY_OK)
-        printf("fallo stdio_copy (codigo %d)\n", r2);
-    else
-        printf("listo. tiempo: %.6f segundos\n\n", t_stdio);
-
-    separador();
-    printf("  sys_smart_copy : %.6f s\n", t_smart);
-    printf("  stdio_copy     : %.6f s\n", t_stdio);
-    printf("  mas rapido     : %s\n",
-           (t_smart < t_stdio) ? "sys_smart_copy" : "stdio_copy");
-    separador();
-
-    printf("\npara benchmarks completos corra: %s --benchmark\n\n", argv[0]);
     return 0;
 }
