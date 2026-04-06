@@ -67,8 +67,9 @@ static void correr_prueba(const char *label, const char *src,
     struct timespec t0, t1;
     double t_smart, t_stdio;
 
+    BackupStats stats = {0};
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    int r1 = sys_smart_copy(src, recipe);
+    int r1 = sys_smart_copy(src, recipe, &stats);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     t_smart = elapsed(&t0, &t1);
 
@@ -158,10 +159,12 @@ int main(int argc, char *argv[]) {
 
     struct timespec t0, t1;
 
+    BackupStats stats = {0};
+
     // medir sys_smart_copy
     printf("corriendo sys_smart_copy...\n");
     clock_gettime(CLOCK_MONOTONIC, &t0);
-    int r1 = sys_smart_copy(src_path, dest_recipe);
+    int r1 = sys_smart_copy(src_path, dest_recipe, &stats);
     clock_gettime(CLOCK_MONOTONIC, &t1);
     double t_smart = elapsed(&t0, &t1);
 
@@ -170,6 +173,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     printf("listo. tiempo: %.6f segundos\n\n", t_smart);
+    
+    printf("--- Estadisticas de Deduplicacion ---\n");
+    printf("Bloques totales procesados: %d\n", stats.chunks_total);
+    printf("Bloques nuevos guardados:   %d\n", stats.chunks_new);
+    printf("Bloques deduplicados:       %d\n", stats.chunks_dedup);
+    printf("Espacio total ahorrado:     %zu bytes\n", stats.bytes_saved);
+    printf("-------------------------------------\n\n");
 
     // medir stdio_copy
     printf("corriendo stdio_copy para comparar...\n");

@@ -38,47 +38,12 @@ static int ensure_repo_dirs(void) {
     return 0;
 }
 
-// intenta guardar el bloque en el chunk store
-// si ya existe (EEXIST) simplemente no hace nada, eso es la deduplicacion
-static int write_chunk(const char *chunk_path, const char *data) {
-    // O_EXCL hace que falle si el archivo ya existe, asi no sobreescribimos
-    int fd = open(chunk_path, O_WRONLY | O_CREAT | O_EXCL, 0644);
 
-    if (fd < 0) {
-        if (errno == EEXIST) return SCOPY_OK; // bloque repetido, ok
-        if (errno == EACCES) {
-            fprintf(stderr, "sin permisos para escribir chunk: %s\n", chunk_path);
-            return SCOPY_ERR_PERM;
-        }
-        perror("error abriendo chunk");
-        return SCOPY_ERR_IO;
-    }
-
-    ssize_t written = write(fd, data, BLOCK_SIZE);
-    close(fd);
-
-    if (written < 0) {
-        if (errno == ENOSPC) {
-            fprintf(stderr, "disco lleno (ENOSPC) guardando chunk: %s\n", chunk_path);
-            return SCOPY_ERR_NOSPACE;
-        }
-        perror("error escribiendo chunk");
-        return SCOPY_ERR_IO;
-    }
-
-    if (written != BLOCK_SIZE) {
-        fprintf(stderr, "escritura incompleta en chunk %s (%zd bytes)\n",
-                chunk_path, written);
-        return SCOPY_ERR_IO;
-    }
-
-    return SCOPY_OK;
-}
 
 // funcion principal: lee el archivo en bloques de 4KB, calcula el hash
 // de cada bloque y lo guarda en el chunk store si no existe ya.
 // tambien genera el archivo de receta con la lista de hashes en orden.
-int sys_smart_copy(const char *src_path, const char *dest_recipe) {
+int sys_smart_copy(const char *src_path, const char *dest_recipe, BackupStats *stats) {
 
     if (!src_path || !dest_recipe) {
         fprintf(stderr, "error: punteros NULL en sys_smart_copy\n");
@@ -135,11 +100,20 @@ int sys_smart_copy(const char *src_path, const char *dest_recipe) {
     char padded[BLOCK_SIZE];
     char hash_str[HASH_STRING_LENGTH];
     char chunk_path[MAX_PATH_LEN];
-    char recipe_entry[HASH_STRING_LENGTH + 1];
     ssize_t bytes_read;
     int status = SCOPY_OK;
 
+    if (stats) {
+        stats->chunks_total = 0;
+        stats->chunks_new = 0;
+        stats->chunks_dedup = 0;
+        stats->bytes_saved = 0;
+    }
+
     while ((bytes_read = read(fd_src, buffer, BLOCK_SIZE)) > 0) {
+        if (stats) {
+            stats->chunks_total++;
+        }
 
         // si el bloque es menor a 4KB lo rellenamos con ceros
         // para que el hash siempre opere sobre el mismo tamaño
@@ -161,7 +135,7 @@ int sys_smart_copy(const char *src_path, const char *dest_recipe) {
         if (fd_chunk >= 0) {
             if (stats) stats->chunks_new++;
             // Es un chunk nuevo, necesitamos escribir los 4KB
-            ssize_t bytes_written = write(fd_chunk, padded_buffer, BLOCK_SIZE);
+            ssize_t bytes_written = write(fd_chunk, padded, BLOCK_SIZE);
             if (bytes_written < 0) {
                 // Manejo de Error ENOSPC (Disk full) muy importante según la rúbrica
                 if (errno == ENOSPC) {
