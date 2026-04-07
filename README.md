@@ -2,7 +2,7 @@
 
 **Asignatura:** Sistemas Operativos
 **Carrera:** Ingeniería en Sistemas
-**Autor:** [Tu Nombre/Matrícula]
+**Autor:** Yan Frank Ríos López, Diego Alejandro Angarita Arboleda, Esteban Álvarez Garcia
 
 ## 1. Resumen del Proyecto
 
